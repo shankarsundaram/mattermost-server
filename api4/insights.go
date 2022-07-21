@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mattermost/mattermost-server/v6/app"
 	"github.com/mattermost/mattermost-server/v6/model"
 )
 
@@ -152,7 +151,7 @@ func getTopChannelsForTeamSince(c *Context, w http.ResponseWriter, r *http.Reque
 	loc := user.GetTimezoneLocation()
 	startTime := model.StartOfDayForTimeRange(c.Params.TimeRange, loc)
 
-	topChannels, err := c.App.GetTopChannelsForTeamSince(c.Params.TeamId, c.AppContext.Session().UserId, &model.InsightsOpts{
+	topChannels, err := c.App.GetTopChannelsForTeamSince(c.AppContext, c.Params.TeamId, c.AppContext.Session().UserId, &model.InsightsOpts{
 		StartUnixMilli: startTime.UnixMilli(),
 		Page:           c.Params.Page,
 		PerPage:        c.Params.PerPage,
@@ -162,7 +161,7 @@ func getTopChannelsForTeamSince(c *Context, w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	topChannels.PostCountByDuration, err = postCountByDurationViewModel(c.App, topChannels, startTime, c.Params.TimeRange, nil, loc)
+	topChannels.PostCountByDuration, err = postCountByDurationViewModel(c, topChannels, startTime, c.Params.TimeRange, nil, loc)
 	if err != nil {
 		c.Err = err
 		return
@@ -208,7 +207,7 @@ func getTopChannelsForUserSince(c *Context, w http.ResponseWriter, r *http.Reque
 	loc := user.GetTimezoneLocation()
 	startTime := model.StartOfDayForTimeRange(c.Params.TimeRange, loc)
 
-	topChannels, err := c.App.GetTopChannelsForUserSince(c.AppContext.Session().UserId, c.Params.TeamId, &model.InsightsOpts{
+	topChannels, err := c.App.GetTopChannelsForUserSince(c.AppContext, c.AppContext.Session().UserId, c.Params.TeamId, &model.InsightsOpts{
 		StartUnixMilli: startTime.UnixMilli(),
 		Page:           c.Params.Page,
 		PerPage:        c.Params.PerPage,
@@ -219,7 +218,7 @@ func getTopChannelsForUserSince(c *Context, w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	topChannels.PostCountByDuration, err = postCountByDurationViewModel(c.App, topChannels, startTime, c.Params.TimeRange, &c.AppContext.Session().UserId, loc)
+	topChannels.PostCountByDuration, err = postCountByDurationViewModel(c, topChannels, startTime, c.Params.TimeRange, &c.AppContext.Session().UserId, loc)
 	if err != nil {
 		c.Err = err
 		return
@@ -261,7 +260,7 @@ func getTopThreadsForTeamSince(c *Context, w http.ResponseWriter, r *http.Reques
 
 	startTime := model.StartOfDayForTimeRange(c.Params.TimeRange, user.GetTimezoneLocation())
 
-	topThreads, err := c.App.GetTopThreadsForTeamSince(c.Params.TeamId, c.AppContext.Session().UserId, &model.InsightsOpts{
+	topThreads, err := c.App.GetTopThreadsForTeamSince(c.AppContext, c.Params.TeamId, c.AppContext.Session().UserId, &model.InsightsOpts{
 		StartUnixMilli: startTime.UnixMilli(),
 		Page:           c.Params.Page,
 		PerPage:        c.Params.PerPage,
@@ -310,7 +309,7 @@ func getTopThreadsForUserSince(c *Context, w http.ResponseWriter, r *http.Reques
 
 	startTime := model.StartOfDayForTimeRange(c.Params.TimeRange, user.GetTimezoneLocation())
 
-	topThreads, err := c.App.GetTopThreadsForUserSince(c.Params.TeamId, c.AppContext.Session().UserId, &model.InsightsOpts{
+	topThreads, err := c.App.GetTopThreadsForUserSince(c.AppContext, c.Params.TeamId, c.AppContext.Session().UserId, &model.InsightsOpts{
 		StartUnixMilli: startTime.UnixMilli(),
 		Page:           c.Params.Page,
 		PerPage:        c.Params.PerPage,
@@ -361,7 +360,7 @@ func getTopDMsForUserSince(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 // postCountByDurationViewModel expects a list of channels that are pre-authorized for the given user to view.
-func postCountByDurationViewModel(app app.AppIface, topChannelList *model.TopChannelList, startTime *time.Time, timeRange string, userID *string, location *time.Location) (model.ChannelPostCountByDuration, *model.AppError) {
+func postCountByDurationViewModel(c *Context, topChannelList *model.TopChannelList, startTime *time.Time, timeRange string, userID *string, location *time.Location) (model.ChannelPostCountByDuration, *model.AppError) {
 	if len(topChannelList.Items) == 0 {
 		return nil, nil
 	}
@@ -373,7 +372,7 @@ func postCountByDurationViewModel(app app.AppIface, topChannelList *model.TopCha
 	} else {
 		grouping = model.PostsByDay
 	}
-	postCountsByDay, err := app.PostCountsByDuration(channelIDs, startTime.UnixMilli(), userID, grouping, location)
+	postCountsByDay, err := c.App.PostCountsByDuration(c.AppContext, channelIDs, startTime.UnixMilli(), userID, grouping, location)
 	if err != nil {
 		return nil, err
 	}
