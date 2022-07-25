@@ -35,6 +35,7 @@ type teamMember struct {
 	SchemeUser  sql.NullBool
 	SchemeAdmin sql.NullBool
 	SchemeGuest sql.NullBool
+	CreateAt    int64
 }
 
 func NewTeamMemberFromModel(tm *model.TeamMember) *teamMember {
@@ -46,6 +47,7 @@ func NewTeamMemberFromModel(tm *model.TeamMember) *teamMember {
 		SchemeGuest: sql.NullBool{Valid: true, Bool: tm.SchemeGuest},
 		SchemeUser:  sql.NullBool{Valid: true, Bool: tm.SchemeUser},
 		SchemeAdmin: sql.NullBool{Valid: true, Bool: tm.SchemeAdmin},
+		CreateAt:    tm.CreateAt,
 	}
 }
 
@@ -60,12 +62,13 @@ type teamMemberWithSchemeRoles struct {
 	TeamSchemeDefaultGuestRole sql.NullString
 	TeamSchemeDefaultUserRole  sql.NullString
 	TeamSchemeDefaultAdminRole sql.NullString
+	CreateAt                   int64
 }
 
 type teamMemberWithSchemeRolesList []teamMemberWithSchemeRoles
 
 func teamMemberSliceColumns() []string {
-	return []string{"TeamId", "UserId", "Roles", "DeleteAt", "SchemeUser", "SchemeAdmin", "SchemeGuest"}
+	return []string{"TeamId", "UserId", "Roles", "DeleteAt", "SchemeUser", "SchemeAdmin", "SchemeGuest", "CreateAt"}
 }
 
 func teamMemberToSlice(member *model.TeamMember) []any {
@@ -77,6 +80,7 @@ func teamMemberToSlice(member *model.TeamMember) []any {
 	resultSlice = append(resultSlice, member.SchemeUser)
 	resultSlice = append(resultSlice, member.SchemeAdmin)
 	resultSlice = append(resultSlice, member.SchemeGuest)
+	resultSlice = append(resultSlice, member.CreateAt)
 	return resultSlice
 }
 
@@ -187,6 +191,7 @@ func (db teamMemberWithSchemeRoles) ToModel() *model.TeamMember {
 		SchemeUser:    rolesResult.schemeUser,
 		SchemeAdmin:   rolesResult.schemeAdmin,
 		ExplicitRoles: strings.Join(rolesResult.explicitRoles, " "),
+		CreateAt:      db.CreateAt,
 	}
 	return tm
 }
@@ -1645,4 +1650,40 @@ func (s SqlTeamStore) GroupSyncedTeamCount() (int64, error) {
 	}
 
 	return count, nil
+}
+
+func (s SqlTeamStore) GetNewTeamMembersSince(teamID string, since int64, offset int, limit int) ([]*model.NewTeamMember, int64, error) {
+	builderF := func(selectClause string) sq.SelectBuilder {
+		return s.getQueryBuilder().
+			Select(selectClause).
+			From("TeamMembers").
+			Join("Users ON Users.id = TeamMembers.userid").
+			Where(sq.GtOrEq{"TeamMembers.createat": since}, sq.Eq{"TeamMembers.deleteat": 0, "teamid": teamID, "Users.deleteat": 0})
+	}
+
+	countBuilder := builderF("count(*)")
+	query, args, err := countBuilder.ToSql()
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "team_tosql")
+	}
+	var totalCount int64
+	err = s.GetReplicaX().Get(&totalCount, query, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to count team members since")
+	}
+
+	newTeamMembersBuilder := builderF("Users.id, Users.username, Users.firstname, Users.lastname, Users.position, Users.position, Users.timezone, TeamMembers.createat").
+		Limit(uint64(limit)).
+		Offset(uint64(offset))
+	query, args, err = newTeamMembersBuilder.ToSql()
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "team_tosql")
+	}
+	var ntms []*model.NewTeamMember
+	err = s.GetReplicaX().Select(&ntms, query, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to get team members since")
+	}
+
+	return ntms, totalCount, nil
 }

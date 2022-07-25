@@ -90,6 +90,22 @@ type InsightUserInformation struct {
 	Username          string `json:"username"`
 }
 
+type NewTeamMembersViewModel struct {
+	InsightsListData
+	Members    []*NewTeamMember `json:"members"`
+	TotalCount int64            `json:"total_count"`
+}
+
+type NewTeamMember struct {
+	Id        string
+	Username  string
+	Firstname string
+	Lastname  string
+	Position  string
+	Timezone  string
+	JoinAt    int64 `db:"createat"`
+}
+
 type DurationPostCount struct {
 	ChannelID string `db:"channelid"`
 	// Duration is an ISO8601 date string representing either a day or a day and hour (ex. "2022-05-26" or "2022-05-26T14").
